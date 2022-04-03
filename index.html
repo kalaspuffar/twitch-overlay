@@ -107,7 +107,8 @@
 
     <script src="credentials.js"></script>
     <script>
-        const FOLLOWER_GOAL = 30;
+        const FOLLOWER_GOAL = 6;
+        const EXTRA_TIME_PER_FOLLOWER = 300;
         let BEARER_TOKEN = '';
         let lastFollower = 'me';
         let followersToday = 0;
@@ -137,7 +138,7 @@
 
                 let numSeconds = (hh * 3600) + (mm * 60) + ss;
 
-                let extraTime = Math.min(followersToday, FOLLOWER_GOAL) * 60;
+                let extraTime = Math.min(followersToday, FOLLOWER_GOAL) * EXTRA_TIME_PER_FOLLOWER;
 
                 let allDay = 86400;
                 let halfAnHour = 1800;
