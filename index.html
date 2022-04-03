@@ -88,9 +88,6 @@
             z-index: 20;
         }
 
-        #loader {
-            display:none;
-        }
     </style>
 </head>
 <body>
@@ -102,8 +99,6 @@
             <div id="progress_bar"></div>
         </div>
     </div>
-
-    <iframe id="loader"></iframe>
 
     <script src="credentials.js"></script>
     <script>
@@ -204,7 +199,7 @@
         })();
 
         function runFunction(functionName, inputName) {
-            document.getElementById('loader').src = 'http://127.0.0.1:8088/API/?Function=' + functionName + '&Input=' + inputName;
+            fetch('http://127.0.0.1:8088/API/?Function=' + functionName + '&Input=' + inputName)
         }
 
         function runLoveMessage() {
