@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Twitch overlay</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bungee&display=swap" rel="stylesheet">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            font-family: 'Bungee', cursive;
+            background: lime;
+            color: #90F;
+        }
+
+        #clock {
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            position: fixed;
+            background-color: #90F;
+            color: #FFF;
+            border-radius: 10px;
+            box-sizing: border-box;
+            padding: 20px 50px 20px 0;
+            font-size: 40pt;
+            width: 395px;
+            height: 330px;
+            right: -50px;
+            top: 175px;
+            line-height: 1em;
+        }
+
+        #debug {
+            display: none;
+            position: fixed;
+            background-color: black;
+            color: blue;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 20pt;
+            font-weight: bold;
+            top: 100px;
+            left: 400px;
+            width: 800px;
+            height: 600px;        
+        }
+
+        .head {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100px;
+        }
+
+        #progress {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: darkgray;
+            width: 700px;
+            height: 60px;
+            border: 1px solid #666;
+        }
+
+        #progress_bar {
+            display: block;
+            position: absolute;
+            top: 0px;
+            left: 0px;
+            background-color: #90F;
+            box-sizing: border-box;
+            width: 0px;
+            height: 60px;
+        }
+
+        #progress_text {
+            font-size: 40pt;
+            color: #FFF;
+            z-index: 20;
+        }
+
+        #loader {
+            display:none;
+        }
+    </style>
+</head>
+<body>
+    <div id="clock"></div>
+    <div id="debug"></div>
+    <div class="head">
+        <div id="progress">
+            <span id="progress_text"></span>
+            <div id="progress_bar"></div>
+        </div>
+    </div>
+
+    <iframe id="loader"></iframe>
+
+    <script src="credentials.js"></script>
+    <script>
+        const FOLLOWER_GOAL = 30;
+        let BEARER_TOKEN = '';
+        let lastFollower = 'me';
+        let followersToday = 0;
+
+        function getTwitchAuthorization() {
+            let url = `https://id.twitch.tv/oauth2/token?client_id=${CLIENT_ID}&client_secret=${CLIENT_SECRET}&grant_type=client_credentials`;
+
+            fetch(url, {
+                method: "POST",
+            })
+            .then((res) => res.json())
+            .then((data) => handleAuthorization(data));
+        }
+
+        function handleAuthorization(data) {
+            let { access_token, expires_in, token_type } = data;
+            BEARER_TOKEN = `Bearer ${access_token}`;
+        }
+        getTwitchAuthorization();
+
+        (function () {
+           setInterval(function() {
+                let date = new Date();
+                let hh = date.getHours();
+                let mm = date.getMinutes();
+                let ss = date.getSeconds();
+
+                let numSeconds = (hh * 3600) + (mm * 60) + ss;
+
+                let extraTime = Math.min(followersToday, FOLLOWER_GOAL) * 60;
+
+                let allDay = 86400;
+                let halfAnHour = 1800;
+                let streamEnd = allDay - halfAnHour + extraTime;
+
+                let timeLeft = streamEnd - numSeconds;
+                if (timeLeft < 0 || timeLeft > 43200) {
+                    document.getElementById('clock').innerHTML = 'TIMES UP';
+                } else {
+                    hh = Math.floor(timeLeft / 3600);
+                    mm = Math.floor((timeLeft - (hh * 3600)) / 60);
+                    ss = Math.floor(timeLeft - (hh * 3600) - (mm * 60));
+                    hh = (hh < 10) ? "0" + hh : hh;
+                    mm = (mm < 10) ? "0" + mm : mm;
+                    ss = (ss < 10) ? "0" + ss : ss;                   
+                    let time = hh + ":" + mm + ":" + ss;
+
+                    document.getElementById('clock').innerHTML = time;
+                }
+
+                updateProgress(followersToday);
+            }, 500);
+
+            setInterval(function() {
+                fetch('https://api.twitch.tv/helix/users/follows?to_id=' + USER_ID, {
+                    method: "GET",
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': BEARER_TOKEN,
+                        'Client-Id': CLIENT_ID
+                    },
+                })
+                .then((res) => res.json())
+                .then((data) => {
+                    let followers = [];
+                    for (const key in data.data) {
+                        let followedDate = new Date(data.data[key].followed_at);
+                        
+                        let yy = followedDate.getFullYear();
+                        let mm = followedDate.getMonth()+1;
+                        let dd = followedDate.getDate();
+                        mm = (mm < 10) ? "0" + mm : mm;
+                        dd = (dd < 10) ? "0" + dd : dd;                   
+
+                        followers.push({
+                            'name': data.data[key].from_name,
+                            'followed_at': yy + '-' + mm + '-' + dd,
+                        })
+                    }
+
+                    if (lastFollower != followers[0].name) {
+                        lastFollower = followers[0].name;
+                        runLoveMessage();
+                    }
+
+                    followersToday = followedToday(followers);
+                });
+
+            }, 5 * 1000);
+            setInterval(function() {
+                getTwitchAuthorization();
+            }, 600 * 1000);
+        })();
+
+        function runFunction(functionName, inputName) {
+            document.getElementById('loader').src = 'http://127.0.0.1:8088/API/?Function=' + functionName + '&Input=' + inputName;
+        }
+
+        function runLoveMessage() {
+            runFunction('OverlayInput1Out', '701084a4-b7b3-4a5a-b9c9-403fde21e5dc');
+            setTimeout(function() {
+                runFunction('Restart', '701084a4-b7b3-4a5a-b9c9-403fde21e5dc');
+                setTimeout(function() {
+                    runFunction('OverlayInput1In', '701084a4-b7b3-4a5a-b9c9-403fde21e5dc');
+                },500);
+            },500);
+        }
+
+        function updateProgress(followerCount) {
+            const PROGRESS_WIDTH = 1000;
+            const val = Math.min(FOLLOWER_GOAL, followerCount);
+            const progress = document.getElementById('progress');
+            const progress_bar = document.getElementById('progress_bar');
+            const progress_text = document.getElementById('progress_text');
+            progress.style.width = PROGRESS_WIDTH + 'px';
+            progress_bar.style.width = (PROGRESS_WIDTH * (val / FOLLOWER_GOAL)) + 'px';
+            progress_text.innerHTML = 'Followers ' + followerCount + ' of ' + FOLLOWER_GOAL;
+        }
+
+        function followedToday(followers) {
+            let today = new Date();
+            let yy = today.getFullYear();
+            let mm = today.getMonth()+1;
+            let dd = today.getDate();
+            mm = (mm < 10) ? "0" + mm : mm;
+            dd = (dd < 10) ? "0" + dd : dd;                   
+
+            const todayStr = yy + '-' + mm + '-' + dd;
+            let count = 0;
+            for (const key in followers) {
+                if (followers[key].followed_at == todayStr) count++;
+            }
+            return count;
+        }
+    </script>
+</body>
+</html>
